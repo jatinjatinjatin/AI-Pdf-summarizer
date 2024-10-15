@@ -1,0 +1,87 @@
+﻿body {
+  background-color: #F2F2F2;
+  font-family: Arial, sans-serif;
+}
+
+h1 {
+  text-align: center;
+}
+
+main {
+  padding: 3em;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+form {
+  margin: 0 auto 20px auto;
+  width: 50%;
+  background-color: #FFFFFF;
+  border-radius: 5px;
+  padding: 20px;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+}
+
+#summary {
+  margin: 20px auto;
+  width: 50%;
+  background-color: #FFFFFF;
+  border-radius: 5px;
+  padding: 20px;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+}
+
+
+input[type="file"] {
+  text-align: center;
+  cursor: pointer;
+  /* padding-left: 30%; */
+}
+
+input[type="submit"] {
+  background-color: #4CAF50;
+  border: none;
+  color: #FFFFFF;
+  padding: 10px 20px;
+  text-align: center;
+  text-decoration: none;
+  
+  font-size: 16px;
+  height: 2.5em;
+  cursor: pointer;
+
+
+}
+input[type="submit"]:hover{
+  background-color: #636c64;
+
+}
+
+
+input {
+  font-family: Helvetica-LightOblique, Helvetica, sans-serif;
+  font-style: oblique;
+  font-size: 1em;
+  width: 100%;
+
+
+  display: block;
+  margin: 10px 0;
+}
+
+div#summary {
+  /* font-family: Helvetica-LightOblique, Helvetica, sans-serif; */
+  font-family:cursive;
+  text-align:justify;
+  font-size: 1em;
+  color: red;
+  word-spacing:5px;
+  line-height:125%;
+}
+
+.hide {
+  position: absolute !important;
+  top: -9999px !important;
+  left: -9999px !important;
+}
+
