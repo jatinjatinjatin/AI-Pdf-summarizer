@@ -1,86 +1,100 @@
-# object-inspect <sup>[![Version Badge][2]][1]</sup>
+# mkdirp
 
-string representations of objects in node and the browser
+Like `mkdir -p`, but in node.js!
 
-[![github actions][actions-image]][actions-url]
-[![coverage][codecov-image]][codecov-url]
-[![dependency status][5]][6]
-[![dev dependency status][7]][8]
-[![License][license-image]][license-url]
-[![Downloads][downloads-image]][downloads-url]
-
-[![npm badge][11]][1]
+[![build status](https://secure.travis-ci.org/substack/node-mkdirp.png)](http://travis-ci.org/substack/node-mkdirp)
 
 # example
 
-## circular
+## pow.js
 
-``` js
-var inspect = require('object-inspect');
-var obj = { a: 1, b: [3,4] };
-obj.c = obj;
-console.log(inspect(obj));
+```js
+var mkdirp = require('mkdirp');
+    
+mkdirp('/tmp/foo/bar/baz', function (err) {
+    if (err) console.error(err)
+    else console.log('pow!')
+});
 ```
 
-## dom element
-
-``` js
-var inspect = require('object-inspect');
-
-var d = document.createElement('div');
-d.setAttribute('id', 'beep');
-d.innerHTML = '<b>wooo</b><i>iiiii</i>';
-
-console.log(inspect([ d, { a: 3, b : 4, c: [5,6,[7,[8,[9]]]] } ]));
-```
-
-output:
+Output
 
 ```
-[ <div id="beep">...</div>, { a: 3, b: 4, c: [ 5, 6, [ 7, [ 8, [ ... ] ] ] ] } ]
+pow!
 ```
+
+And now /tmp/foo/bar/baz exists, huzzah!
 
 # methods
 
-``` js
-var inspect = require('object-inspect')
+```js
+var mkdirp = require('mkdirp');
 ```
 
-## var s = inspect(obj, opts={})
+## mkdirp(dir, opts, cb)
 
-Return a string `s` with the string representation of `obj` up to a depth of `opts.depth`.
+Create a new directory and any necessary subdirectories at `dir` with octal
+permission string `opts.mode`. If `opts` is a non-object, it will be treated as
+the `opts.mode`.
 
-Additional options:
-  - `quoteStyle`: must be "single" or "double", if present. Default `'single'` for strings, `'double'` for HTML elements.
-  - `maxStringLength`: must be `0`, a positive integer, `Infinity`, or `null`, if present. Default `Infinity`.
-  - `customInspect`: When `true`, a custom inspect method function will be invoked (either undere the `util.inspect.custom` symbol, or the `inspect` property). When the string `'symbol'`, only the symbol method will be invoked. Default `true`.
-  - `indent`: must be "\t", `null`, or a positive integer. Default `null`.
-  - `numericSeparator`: must be a boolean, if present. Default `false`. If `true`, all numbers will be printed with numeric separators (eg, `1234.5678` will be printed as `'1_234.567_8'`)
+If `opts.mode` isn't specified, it defaults to `0777`.
+
+`cb(err, made)` fires with the error or the first directory `made`
+that had to be created, if any.
+
+You can optionally pass in an alternate `fs` implementation by passing in
+`opts.fs`. Your implementation should have `opts.fs.mkdir(path, mode, cb)` and
+`opts.fs.stat(path, cb)`.
+
+## mkdirp.sync(dir, opts)
+
+Synchronously create a new directory and any necessary subdirectories at `dir`
+with octal permission string `opts.mode`. If `opts` is a non-object, it will be
+treated as the `opts.mode`.
+
+If `opts.mode` isn't specified, it defaults to `0777`.
+
+Returns the first directory that had to be created, if any.
+
+You can optionally pass in an alternate `fs` implementation by passing in
+`opts.fs`. Your implementation should have `opts.fs.mkdirSync(path, mode)` and
+`opts.fs.statSync(path)`.
+
+# usage
+
+This package also ships with a `mkdirp` command.
+
+```
+usage: mkdirp [DIR1,DIR2..] {OPTIONS}
+
+  Create each supplied directory including any necessary parent directories that
+  don't yet exist.
+  
+  If the directory already exists, do nothing.
+
+OPTIONS are:
+
+  -m, --mode   If a directory needs to be created, set the mode as an octal
+               permission string.
+
+```
 
 # install
 
-With [npm](https://npmjs.org) do:
+With [npm](http://npmjs.org) do:
 
 ```
-npm install object-inspect
+npm install mkdirp
 ```
+
+to get the library, or
+
+```
+npm install -g mkdirp
+```
+
+to get the command.
 
 # license
 
 MIT
-
-[1]: https://npmjs.org/package/object-inspect
-[2]: https://versionbadg.es/inspect-js/object-inspect.svg
-[5]: https://david-dm.org/inspect-js/object-inspect.svg
-[6]: https://david-dm.org/inspect-js/object-inspect
-[7]: https://david-dm.org/inspect-js/object-inspect/dev-status.svg
-[8]: https://david-dm.org/inspect-js/object-inspect#info=devDependencies
-[11]: https://nodei.co/npm/object-inspect.png?downloads=true&stars=true
-[license-image]: https://img.shields.io/npm/l/object-inspect.svg
-[license-url]: LICENSE
-[downloads-image]: https://img.shields.io/npm/dm/object-inspect.svg
-[downloads-url]: https://npm-stat.com/charts.html?package=object-inspect
-[codecov-image]: https://codecov.io/gh/inspect-js/object-inspect/branch/main/graphs/badge.svg
-[codecov-url]: https://app.codecov.io/gh/inspect-js/object-inspect/
-[actions-image]: https://img.shields.io/endpoint?url=https://github-actions-badge-u3jn4tfpocch.runkit.sh/inspect-js/object-inspect
-[actions-url]: https://github.com/inspect-js/object-inspect/actions
