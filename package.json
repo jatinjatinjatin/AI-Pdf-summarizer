@@ -1,69 +1,34 @@
 {
-  "name": "is-extglob",
-  "description": "Returns true if a string has an extglob.",
-  "version": "2.1.1",
-  "homepage": "https://github.com/jonschlinkert/is-extglob",
-  "author": "Jon Schlinkert (https://github.com/jonschlinkert)",
-  "repository": "jonschlinkert/is-extglob",
-  "bugs": {
-    "url": "https://github.com/jonschlinkert/is-extglob/issues"
-  },
-  "license": "MIT",
-  "files": [
-    "index.js"
-  ],
+  "name": "semver",
+  "version": "7.0.0",
+  "description": "The semantic version parser used by npm.",
   "main": "index.js",
-  "engines": {
-    "node": ">=0.10.0"
-  },
   "scripts": {
-    "test": "mocha"
+    "test": "tap",
+    "snap": "tap",
+    "preversion": "npm test",
+    "postversion": "npm publish",
+    "postpublish": "git push origin --follow-tags"
   },
   "devDependencies": {
-    "gulp-format-md": "^0.1.10",
-    "mocha": "^3.0.2"
+    "tap": "^14.10.1"
   },
-  "keywords": [
-    "bash",
-    "braces",
-    "check",
-    "exec",
-    "expression",
-    "extglob",
-    "glob",
-    "globbing",
-    "globstar",
-    "is",
-    "match",
-    "matches",
-    "pattern",
-    "regex",
-    "regular",
-    "string",
-    "test"
+  "license": "ISC",
+  "repository": "https://github.com/npm/node-semver",
+  "bin": {
+    "semver": "./bin/semver.js"
+  },
+  "files": [
+    "bin",
+    "range.bnf",
+    "classes",
+    "functions",
+    "internal",
+    "ranges",
+    "index.js"
   ],
-  "verb": {
-    "toc": false,
-    "layout": "default",
-    "tasks": [
-      "readme"
-    ],
-    "plugins": [
-      "gulp-format-md"
-    ],
-    "related": {
-      "list": [
-        "has-glob",
-        "is-glob",
-        "micromatch"
-      ]
-    },
-    "reflinks": [
-      "verb",
-      "verb-generate-readme"
-    ],
-    "lint": {
-      "reflinks": true
-    }
+  "tap": {
+    "check-coverage": true,
+    "coverage-map": "map.js"
   }
 }
