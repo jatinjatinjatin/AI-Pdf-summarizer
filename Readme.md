@@ -30,6 +30,3 @@ var exp = pathToRegexp('/foo/:bar', keys);
 
 You can see a live demo of this library in use at [express-route-tester](http://forbeslindesay.github.com/express-route-tester/).
 
-## License
-
-  MIT
