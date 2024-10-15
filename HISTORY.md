@@ -1,142 +1,70 @@
-0.5.0 / 2022-04-11
+0.5.2 / 2017-09-13
 ==================
 
-  * Add `priority` option
-  * Fix `expires` option to reject invalid dates
-  * pref: improve default decode speed
-  * pref: remove slow string split in parse
+  * Fix regression matching multiple ETags in `If-None-Match`
+  * perf: improve `If-None-Match` token parsing
 
-0.4.2 / 2022-02-02
+0.5.1 / 2017-09-11
 ==================
 
-  * pref: read value only when assigning in parse
-  * pref: remove unnecessary regexp in parse
+  * Fix handling of modified headers with invalid dates
+  * perf: improve ETag match loop
 
-0.4.1 / 2020-04-21
+0.5.0 / 2017-02-21
 ==================
 
-  * Fix `maxAge` option to reject invalid values
+  * Fix incorrect result when `If-None-Match` has both `*` and ETags
+  * Fix weak `ETag` matching to match spec
+  * perf: delay reading header values until needed
+  * perf: skip checking modified time if ETag check failed
+  * perf: skip parsing `If-None-Match` when no `ETag` header
+  * perf: use `Date.parse` instead of `new Date`
 
-0.4.0 / 2019-05-15
+0.4.0 / 2017-02-05
 ==================
 
-  * Add `SameSite=None` support
-
-0.3.1 / 2016-05-26
-==================
-
-  * Fix `sameSite: true` to work with draft-7 clients
-    - `true` now sends `SameSite=Strict` instead of `SameSite`
-
-0.3.0 / 2016-05-26
-==================
-
-  * Add `sameSite` option
-    - Replaces `firstPartyOnly` option, never implemented by browsers
-  * Improve error message when `encode` is not a function
-  * Improve error message when `expires` is not a `Date`
-
-0.2.4 / 2016-05-20
-==================
-
+  * Fix false detection of `no-cache` request directive
   * perf: enable strict mode
-  * perf: use for loop in parse
-  * perf: use string concatination for serialization
+  * perf: hoist regular expressions
+  * perf: remove duplicate conditional
+  * perf: remove unnecessary boolean coercions
 
-0.2.3 / 2015-10-25
+0.3.0 / 2015-05-12
 ==================
 
-  * Fix cookie `Max-Age` to never be a floating point number
+  * Add weak `ETag` matching support
 
-0.2.2 / 2015-09-17
+0.2.4 / 2014-09-07
 ==================
 
-  * Fix regression when setting empty cookie value
-    - Ease the new restriction, which is just basic header-level validation
-  * Fix typo in invalid value errors
+  * Support Node.js 0.6
 
-0.2.1 / 2015-09-17
+0.2.3 / 2014-09-07
 ==================
 
-  * Throw on invalid values provided to `serialize`
-    - Ensures the resulting string is a valid HTTP header value
+  * Move repository to jshttp
 
-0.2.0 / 2015-08-13
+0.2.2 / 2014-02-19
 ==================
 
-  * Add `firstPartyOnly` option
-  * Throw better error for invalid argument to parse
-  * perf: hoist regular expression
+  * Revert "Fix for blank page on Safari reload"
 
-0.1.5 / 2015-09-17
+0.2.1 / 2014-01-29
 ==================
 
-  * Fix regression when setting empty cookie value
-    - Ease the new restriction, which is just basic header-level validation
-  * Fix typo in invalid value errors
+  * Fix for blank page on Safari reload
 
-0.1.4 / 2015-09-17
+0.2.0 / 2013-08-11
 ==================
 
-  * Throw better error for invalid argument to parse
-  * Throw on invalid values provided to `serialize`
-    - Ensures the resulting string is a valid HTTP header value
+  * Return stale for `Cache-Control: no-cache`
 
-0.1.3 / 2015-05-19
+0.1.0 / 2012-06-15
 ==================
 
-  * Reduce the scope of try-catch deopt
-  * Remove argument reassignments
+  * Add `If-None-Match: *` support
 
-0.1.2 / 2014-04-16
-==================
-
-  * Remove unnecessary files from npm package
-
-0.1.1 / 2014-02-23
-==================
-
-  * Fix bad parse when cookie value contained a comma
-  * Fix support for `maxAge` of `0`
-
-0.1.0 / 2013-05-01
-==================
-
-  * Add `decode` option
-  * Add `encode` option
-
-0.0.6 / 2013-04-08
-==================
-
-  * Ignore cookie parts missing `=`
-
-0.0.5 / 2012-10-29
-==================
-
-  * Return raw cookie value if value unescape errors
-
-0.0.4 / 2012-06-21
-==================
-
-  * Use encode/decodeURIComponent for cookie encoding/decoding
-    - Improve server/client interoperability
-
-0.0.3 / 2012-06-06
-==================
-
-  * Only escape special characters per the cookie RFC
-
-0.0.2 / 2012-06-01
-==================
-
-  * Fix `maxAge` option to not throw error
-
-0.0.1 / 2012-05-28
-==================
-
-  * Add more tests
-
-0.0.0 / 2012-05-28
+0.0.1 / 2012-06-10
 ==================
 
   * Initial release

@@ -1,51 +1,137 @@
-/**
- * Module dependencies.
+/*!
+ * fresh
+ * Copyright(c) 2012 TJ Holowaychuk
+ * Copyright(c) 2016-2017 Douglas Christopher Wilson
+ * MIT Licensed
  */
 
-var crypto = require('crypto');
+'use strict'
 
 /**
- * Sign the given `val` with `secret`.
+ * RegExp to check for no-cache token in Cache-Control.
+ * @private
+ */
+
+var CACHE_CONTROL_NO_CACHE_REGEXP = /(?:^|,)\s*?no-cache\s*?(?:,|$)/
+
+/**
+ * Module exports.
+ * @public
+ */
+
+module.exports = fresh
+
+/**
+ * Check freshness of the response using request and response headers.
  *
- * @param {String} val
- * @param {String} secret
- * @return {String}
- * @api private
+ * @param {Object} reqHeaders
+ * @param {Object} resHeaders
+ * @return {Boolean}
+ * @public
  */
 
-exports.sign = function(val, secret){
-  if ('string' != typeof val) throw new TypeError("Cookie value must be provided as a string.");
-  if ('string' != typeof secret) throw new TypeError("Secret string must be provided.");
-  return val + '.' + crypto
-    .createHmac('sha256', secret)
-    .update(val)
-    .digest('base64')
-    .replace(/\=+$/, '');
-};
+function fresh (reqHeaders, resHeaders) {
+  // fields
+  var modifiedSince = reqHeaders['if-modified-since']
+  var noneMatch = reqHeaders['if-none-match']
+
+  // unconditional request
+  if (!modifiedSince && !noneMatch) {
+    return false
+  }
+
+  // Always return stale when Cache-Control: no-cache
+  // to support end-to-end reload requests
+  // https://tools.ietf.org/html/rfc2616#section-14.9.4
+  var cacheControl = reqHeaders['cache-control']
+  if (cacheControl && CACHE_CONTROL_NO_CACHE_REGEXP.test(cacheControl)) {
+    return false
+  }
+
+  // if-none-match
+  if (noneMatch && noneMatch !== '*') {
+    var etag = resHeaders['etag']
+
+    if (!etag) {
+      return false
+    }
+
+    var etagStale = true
+    var matches = parseTokenList(noneMatch)
+    for (var i = 0; i < matches.length; i++) {
+      var match = matches[i]
+      if (match === etag || match === 'W/' + etag || 'W/' + match === etag) {
+        etagStale = false
+        break
+      }
+    }
+
+    if (etagStale) {
+      return false
+    }
+  }
+
+  // if-modified-since
+  if (modifiedSince) {
+    var lastModified = resHeaders['last-modified']
+    var modifiedStale = !lastModified || !(parseHttpDate(lastModified) <= parseHttpDate(modifiedSince))
+
+    if (modifiedStale) {
+      return false
+    }
+  }
+
+  return true
+}
 
 /**
- * Unsign and decode the given `val` with `secret`,
- * returning `false` if the signature is invalid.
+ * Parse an HTTP Date into a number.
  *
- * @param {String} val
- * @param {String} secret
- * @return {String|Boolean}
- * @api private
+ * @param {string} date
+ * @private
  */
 
-exports.unsign = function(val, secret){
-  if ('string' != typeof val) throw new TypeError("Signed cookie string must be provided.");
-  if ('string' != typeof secret) throw new TypeError("Secret string must be provided.");
-  var str = val.slice(0, val.lastIndexOf('.'))
-    , mac = exports.sign(str, secret);
-  
-  return sha1(mac) == sha1(val) ? str : false;
-};
+function parseHttpDate (date) {
+  var timestamp = date && Date.parse(date)
+
+  // istanbul ignore next: guard against date.js Date.parse patching
+  return typeof timestamp === 'number'
+    ? timestamp
+    : NaN
+}
 
 /**
- * Private
+ * Parse a HTTP token list.
+ *
+ * @param {string} str
+ * @private
  */
 
-function sha1(str){
-  return crypto.createHash('sha1').update(str).digest('hex');
+function parseTokenList (str) {
+  var end = 0
+  var list = []
+  var start = 0
+
+  // gather tokens
+  for (var i = 0, len = str.length; i < len; i++) {
+    switch (str.charCodeAt(i)) {
+      case 0x20: /*   */
+        if (start === end) {
+          start = end = i + 1
+        }
+        break
+      case 0x2c: /* , */
+        list.push(str.substring(start, end))
+        start = end = i + 1
+        break
+      default:
+        end = i + 1
+        break
+    }
+  }
+
+  // final token
+  list.push(str.substring(start, end))
+
+  return list
 }

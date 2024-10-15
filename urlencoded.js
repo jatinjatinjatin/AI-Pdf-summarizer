@@ -1,350 +1,284 @@
-'use strict';
+/*!
+ * body-parser
+ * Copyright(c) 2014 Jonathan Ong
+ * Copyright(c) 2014-2015 Douglas Christopher Wilson
+ * MIT Licensed
+ */
 
-const { Writable } = require('stream');
+'use strict'
 
-const { getDecoder } = require('../utils.js');
+/**
+ * Module dependencies.
+ * @private
+ */
 
-class URLEncoded extends Writable {
-  constructor(cfg) {
-    const streamOpts = {
-      autoDestroy: true,
-      emitClose: true,
-      highWaterMark: (typeof cfg.highWaterMark === 'number'
-                      ? cfg.highWaterMark
-                      : undefined),
-    };
-    super(streamOpts);
+var bytes = require('bytes')
+var contentType = require('content-type')
+var createError = require('http-errors')
+var debug = require('debug')('body-parser:urlencoded')
+var deprecate = require('depd')('body-parser')
+var read = require('../read')
+var typeis = require('type-is')
 
-    let charset = (cfg.defCharset || 'utf8');
-    if (cfg.conType.params && typeof cfg.conType.params.charset === 'string')
-      charset = cfg.conType.params.charset;
+/**
+ * Module exports.
+ */
 
-    this.charset = charset;
+module.exports = urlencoded
 
-    const limits = cfg.limits;
-    this.fieldSizeLimit = (limits && typeof limits.fieldSize === 'number'
-                           ? limits.fieldSize
-                           : 1 * 1024 * 1024);
-    this.fieldsLimit = (limits && typeof limits.fields === 'number'
-                        ? limits.fields
-                        : Infinity);
-    this.fieldNameSizeLimit = (
-      limits && typeof limits.fieldNameSize === 'number'
-      ? limits.fieldNameSize
-      : 100
-    );
+/**
+ * Cache of parser modules.
+ */
 
-    this._inKey = true;
-    this._keyTrunc = false;
-    this._valTrunc = false;
-    this._bytesKey = 0;
-    this._bytesVal = 0;
-    this._fields = 0;
-    this._key = '';
-    this._val = '';
-    this._byte = -2;
-    this._lastPos = 0;
-    this._encode = 0;
-    this._decoder = getDecoder(charset);
+var parsers = Object.create(null)
+
+/**
+ * Create a middleware to parse urlencoded bodies.
+ *
+ * @param {object} [options]
+ * @return {function}
+ * @public
+ */
+
+function urlencoded (options) {
+  var opts = options || {}
+
+  // notice because option default will flip in next major
+  if (opts.extended === undefined) {
+    deprecate('undefined extended: provide extended option')
   }
 
-  static detect(conType) {
-    return (conType.type === 'application'
-            && conType.subtype === 'x-www-form-urlencoded');
+  var extended = opts.extended !== false
+  var inflate = opts.inflate !== false
+  var limit = typeof opts.limit !== 'number'
+    ? bytes.parse(opts.limit || '100kb')
+    : opts.limit
+  var type = opts.type || 'application/x-www-form-urlencoded'
+  var verify = opts.verify || false
+
+  if (verify !== false && typeof verify !== 'function') {
+    throw new TypeError('option verify must be function')
   }
 
-  _write(chunk, enc, cb) {
-    if (this._fields >= this.fieldsLimit)
-      return cb();
+  // create the appropriate query parser
+  var queryparse = extended
+    ? extendedparser(opts)
+    : simpleparser(opts)
 
-    let i = 0;
-    const len = chunk.length;
-    this._lastPos = 0;
+  // create the appropriate type checking function
+  var shouldParse = typeof type !== 'function'
+    ? typeChecker(type)
+    : type
 
-    // Check if we last ended mid-percent-encoded byte
-    if (this._byte !== -2) {
-      i = readPctEnc(this, chunk, i, len);
-      if (i === -1)
-        return cb(new Error('Malformed urlencoded form'));
-      if (i >= len)
-        return cb();
-      if (this._inKey)
-        ++this._bytesKey;
-      else
-        ++this._bytesVal;
-    }
-
-main:
-    while (i < len) {
-      if (this._inKey) {
-        // Parsing key
-
-        i = skipKeyBytes(this, chunk, i, len);
-
-        while (i < len) {
-          switch (chunk[i]) {
-            case 61: // '='
-              if (this._lastPos < i)
-                this._key += chunk.latin1Slice(this._lastPos, i);
-              this._lastPos = ++i;
-              this._key = this._decoder(this._key, this._encode);
-              this._encode = 0;
-              this._inKey = false;
-              continue main;
-            case 38: // '&'
-              if (this._lastPos < i)
-                this._key += chunk.latin1Slice(this._lastPos, i);
-              this._lastPos = ++i;
-              this._key = this._decoder(this._key, this._encode);
-              this._encode = 0;
-              if (this._bytesKey > 0) {
-                this.emit(
-                  'field',
-                  this._key,
-                  '',
-                  { nameTruncated: this._keyTrunc,
-                    valueTruncated: false,
-                    encoding: this.charset,
-                    mimeType: 'text/plain' }
-                );
-              }
-              this._key = '';
-              this._val = '';
-              this._keyTrunc = false;
-              this._valTrunc = false;
-              this._bytesKey = 0;
-              this._bytesVal = 0;
-              if (++this._fields >= this.fieldsLimit) {
-                this.emit('fieldsLimit');
-                return cb();
-              }
-              continue;
-            case 43: // '+'
-              if (this._lastPos < i)
-                this._key += chunk.latin1Slice(this._lastPos, i);
-              this._key += ' ';
-              this._lastPos = i + 1;
-              break;
-            case 37: // '%'
-              if (this._encode === 0)
-                this._encode = 1;
-              if (this._lastPos < i)
-                this._key += chunk.latin1Slice(this._lastPos, i);
-              this._lastPos = i + 1;
-              this._byte = -1;
-              i = readPctEnc(this, chunk, i + 1, len);
-              if (i === -1)
-                return cb(new Error('Malformed urlencoded form'));
-              if (i >= len)
-                return cb();
-              ++this._bytesKey;
-              i = skipKeyBytes(this, chunk, i, len);
-              continue;
-          }
-          ++i;
-          ++this._bytesKey;
-          i = skipKeyBytes(this, chunk, i, len);
-        }
-        if (this._lastPos < i)
-          this._key += chunk.latin1Slice(this._lastPos, i);
-      } else {
-        // Parsing value
-
-        i = skipValBytes(this, chunk, i, len);
-
-        while (i < len) {
-          switch (chunk[i]) {
-            case 38: // '&'
-              if (this._lastPos < i)
-                this._val += chunk.latin1Slice(this._lastPos, i);
-              this._lastPos = ++i;
-              this._inKey = true;
-              this._val = this._decoder(this._val, this._encode);
-              this._encode = 0;
-              if (this._bytesKey > 0 || this._bytesVal > 0) {
-                this.emit(
-                  'field',
-                  this._key,
-                  this._val,
-                  { nameTruncated: this._keyTrunc,
-                    valueTruncated: this._valTrunc,
-                    encoding: this.charset,
-                    mimeType: 'text/plain' }
-                );
-              }
-              this._key = '';
-              this._val = '';
-              this._keyTrunc = false;
-              this._valTrunc = false;
-              this._bytesKey = 0;
-              this._bytesVal = 0;
-              if (++this._fields >= this.fieldsLimit) {
-                this.emit('fieldsLimit');
-                return cb();
-              }
-              continue main;
-            case 43: // '+'
-              if (this._lastPos < i)
-                this._val += chunk.latin1Slice(this._lastPos, i);
-              this._val += ' ';
-              this._lastPos = i + 1;
-              break;
-            case 37: // '%'
-              if (this._encode === 0)
-                this._encode = 1;
-              if (this._lastPos < i)
-                this._val += chunk.latin1Slice(this._lastPos, i);
-              this._lastPos = i + 1;
-              this._byte = -1;
-              i = readPctEnc(this, chunk, i + 1, len);
-              if (i === -1)
-                return cb(new Error('Malformed urlencoded form'));
-              if (i >= len)
-                return cb();
-              ++this._bytesVal;
-              i = skipValBytes(this, chunk, i, len);
-              continue;
-          }
-          ++i;
-          ++this._bytesVal;
-          i = skipValBytes(this, chunk, i, len);
-        }
-        if (this._lastPos < i)
-          this._val += chunk.latin1Slice(this._lastPos, i);
-      }
-    }
-
-    cb();
+  function parse (body) {
+    return body.length
+      ? queryparse(body)
+      : {}
   }
 
-  _final(cb) {
-    if (this._byte !== -2)
-      return cb(new Error('Malformed urlencoded form'));
-    if (!this._inKey || this._bytesKey > 0 || this._bytesVal > 0) {
-      if (this._inKey)
-        this._key = this._decoder(this._key, this._encode);
-      else
-        this._val = this._decoder(this._val, this._encode);
-      this.emit(
-        'field',
-        this._key,
-        this._val,
-        { nameTruncated: this._keyTrunc,
-          valueTruncated: this._valTrunc,
-          encoding: this.charset,
-          mimeType: 'text/plain' }
-      );
+  return function urlencodedParser (req, res, next) {
+    if (req._body) {
+      debug('body already parsed')
+      next()
+      return
     }
-    cb();
+
+    req.body = req.body || {}
+
+    // skip requests without bodies
+    if (!typeis.hasBody(req)) {
+      debug('skip empty body')
+      next()
+      return
+    }
+
+    debug('content-type %j', req.headers['content-type'])
+
+    // determine if request should be parsed
+    if (!shouldParse(req)) {
+      debug('skip parsing')
+      next()
+      return
+    }
+
+    // assert charset
+    var charset = getCharset(req) || 'utf-8'
+    if (charset !== 'utf-8') {
+      debug('invalid charset')
+      next(createError(415, 'unsupported charset "' + charset.toUpperCase() + '"', {
+        charset: charset,
+        type: 'charset.unsupported'
+      }))
+      return
+    }
+
+    // read
+    read(req, res, next, parse, debug, {
+      debug: debug,
+      encoding: charset,
+      inflate: inflate,
+      limit: limit,
+      verify: verify
+    })
   }
 }
 
-function readPctEnc(self, chunk, pos, len) {
-  if (pos >= len)
-    return len;
+/**
+ * Get the extended query parser.
+ *
+ * @param {object} options
+ */
 
-  if (self._byte === -1) {
-    // We saw a '%' but no hex characters yet
-    const hexUpper = HEX_VALUES[chunk[pos++]];
-    if (hexUpper === -1)
-      return -1;
+function extendedparser (options) {
+  var parameterLimit = options.parameterLimit !== undefined
+    ? options.parameterLimit
+    : 1000
+  var parse = parser('qs')
 
-    if (hexUpper >= 8)
-      self._encode = 2; // Indicate high bits detected
-
-    if (pos < len) {
-      // Both hex characters are in this chunk
-      const hexLower = HEX_VALUES[chunk[pos++]];
-      if (hexLower === -1)
-        return -1;
-
-      if (self._inKey)
-        self._key += String.fromCharCode((hexUpper << 4) + hexLower);
-      else
-        self._val += String.fromCharCode((hexUpper << 4) + hexLower);
-
-      self._byte = -2;
-      self._lastPos = pos;
-    } else {
-      // Only one hex character was available in this chunk
-      self._byte = hexUpper;
-    }
-  } else {
-    // We saw only one hex character so far
-    const hexLower = HEX_VALUES[chunk[pos++]];
-    if (hexLower === -1)
-      return -1;
-
-    if (self._inKey)
-      self._key += String.fromCharCode((self._byte << 4) + hexLower);
-    else
-      self._val += String.fromCharCode((self._byte << 4) + hexLower);
-
-    self._byte = -2;
-    self._lastPos = pos;
+  if (isNaN(parameterLimit) || parameterLimit < 1) {
+    throw new TypeError('option parameterLimit must be a positive number')
   }
 
-  return pos;
-}
-
-function skipKeyBytes(self, chunk, pos, len) {
-  // Skip bytes if we've truncated
-  if (self._bytesKey > self.fieldNameSizeLimit) {
-    if (!self._keyTrunc) {
-      if (self._lastPos < pos)
-        self._key += chunk.latin1Slice(self._lastPos, pos - 1);
-    }
-    self._keyTrunc = true;
-    for (; pos < len; ++pos) {
-      const code = chunk[pos];
-      if (code === 61/* '=' */ || code === 38/* '&' */)
-        break;
-      ++self._bytesKey;
-    }
-    self._lastPos = pos;
+  if (isFinite(parameterLimit)) {
+    parameterLimit = parameterLimit | 0
   }
 
-  return pos;
+  return function queryparse (body) {
+    var paramCount = parameterCount(body, parameterLimit)
+
+    if (paramCount === undefined) {
+      debug('too many parameters')
+      throw createError(413, 'too many parameters', {
+        type: 'parameters.too.many'
+      })
+    }
+
+    var arrayLimit = Math.max(100, paramCount)
+
+    debug('parse extended urlencoding')
+    return parse(body, {
+      allowPrototypes: true,
+      arrayLimit: arrayLimit,
+      depth: Infinity,
+      parameterLimit: parameterLimit
+    })
+  }
 }
 
-function skipValBytes(self, chunk, pos, len) {
-  // Skip bytes if we've truncated
-  if (self._bytesVal > self.fieldSizeLimit) {
-    if (!self._valTrunc) {
-      if (self._lastPos < pos)
-        self._val += chunk.latin1Slice(self._lastPos, pos - 1);
+/**
+ * Get the charset of a request.
+ *
+ * @param {object} req
+ * @api private
+ */
+
+function getCharset (req) {
+  try {
+    return (contentType.parse(req).parameters.charset || '').toLowerCase()
+  } catch (e) {
+    return undefined
+  }
+}
+
+/**
+ * Count the number of parameters, stopping once limit reached
+ *
+ * @param {string} body
+ * @param {number} limit
+ * @api private
+ */
+
+function parameterCount (body, limit) {
+  var count = 0
+  var index = 0
+
+  while ((index = body.indexOf('&', index)) !== -1) {
+    count++
+    index++
+
+    if (count === limit) {
+      return undefined
     }
-    self._valTrunc = true;
-    for (; pos < len; ++pos) {
-      if (chunk[pos] === 38/* '&' */)
-        break;
-      ++self._bytesVal;
-    }
-    self._lastPos = pos;
   }
 
-  return pos;
+  return count
 }
 
-/* eslint-disable no-multi-spaces */
-const HEX_VALUES = [
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-   0,  1,  2,  3,  4,  5,  6,  7,  8,  9, -1, -1, -1, -1, -1, -1,
-  -1, 10, 11, 12, 13, 14, 15, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, 10, 11, 12, 13, 14, 15, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-];
-/* eslint-enable no-multi-spaces */
+/**
+ * Get parser for module name dynamically.
+ *
+ * @param {string} name
+ * @return {function}
+ * @api private
+ */
 
-module.exports = URLEncoded;
+function parser (name) {
+  var mod = parsers[name]
+
+  if (mod !== undefined) {
+    return mod.parse
+  }
+
+  // this uses a switch for static require analysis
+  switch (name) {
+    case 'qs':
+      mod = require('qs')
+      break
+    case 'querystring':
+      mod = require('querystring')
+      break
+  }
+
+  // store to prevent invoking require()
+  parsers[name] = mod
+
+  return mod.parse
+}
+
+/**
+ * Get the simple query parser.
+ *
+ * @param {object} options
+ */
+
+function simpleparser (options) {
+  var parameterLimit = options.parameterLimit !== undefined
+    ? options.parameterLimit
+    : 1000
+  var parse = parser('querystring')
+
+  if (isNaN(parameterLimit) || parameterLimit < 1) {
+    throw new TypeError('option parameterLimit must be a positive number')
+  }
+
+  if (isFinite(parameterLimit)) {
+    parameterLimit = parameterLimit | 0
+  }
+
+  return function queryparse (body) {
+    var paramCount = parameterCount(body, parameterLimit)
+
+    if (paramCount === undefined) {
+      debug('too many parameters')
+      throw createError(413, 'too many parameters', {
+        type: 'parameters.too.many'
+      })
+    }
+
+    debug('parse urlencoding')
+    return parse(body, undefined, undefined, { maxKeys: parameterLimit })
+  }
+}
+
+/**
+ * Get the simple type checker.
+ *
+ * @param {string} type
+ * @return {function}
+ */
+
+function typeChecker (type) {
+  return function checkType (req) {
+    return Boolean(typeis(req, type))
+  }
+}
