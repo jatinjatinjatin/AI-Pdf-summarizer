@@ -93,8 +93,4 @@ to get the library, or
 npm install -g mkdirp
 ```
 
-to get the command.
 
-# license
-
-MIT
