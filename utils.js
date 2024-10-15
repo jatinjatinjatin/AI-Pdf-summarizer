@@ -1,304 +1,64 @@
-/*!
- * express
- * Copyright(c) 2009-2013 TJ Holowaychuk
- * Copyright(c) 2014-2015 Douglas Christopher Wilson
- * MIT Licensed
- */
-
 'use strict';
 
-/**
- * Module dependencies.
- * @api private
- */
+const path = require('path');
+const win32 = process.platform === 'win32';
+const {
+  REGEX_BACKSLASH,
+  REGEX_REMOVE_BACKSLASH,
+  REGEX_SPECIAL_CHARS,
+  REGEX_SPECIAL_CHARS_GLOBAL
+} = require('./constants');
 
-var Buffer = require('safe-buffer').Buffer
-var contentDisposition = require('content-disposition');
-var contentType = require('content-type');
-var deprecate = require('depd')('express');
-var flatten = require('array-flatten');
-var mime = require('send').mime;
-var etag = require('etag');
-var proxyaddr = require('proxy-addr');
-var qs = require('qs');
-var querystring = require('querystring');
+exports.isObject = val => val !== null && typeof val === 'object' && !Array.isArray(val);
+exports.hasRegexChars = str => REGEX_SPECIAL_CHARS.test(str);
+exports.isRegexChar = str => str.length === 1 && exports.hasRegexChars(str);
+exports.escapeRegex = str => str.replace(REGEX_SPECIAL_CHARS_GLOBAL, '\\$1');
+exports.toPosixSlashes = str => str.replace(REGEX_BACKSLASH, '/');
 
-/**
- * Return strong ETag for `body`.
- *
- * @param {String|Buffer} body
- * @param {String} [encoding]
- * @return {String}
- * @api private
- */
-
-exports.etag = createETagGenerator({ weak: false })
-
-/**
- * Return weak ETag for `body`.
- *
- * @param {String|Buffer} body
- * @param {String} [encoding]
- * @return {String}
- * @api private
- */
-
-exports.wetag = createETagGenerator({ weak: true })
-
-/**
- * Check if `path` looks absolute.
- *
- * @param {String} path
- * @return {Boolean}
- * @api private
- */
-
-exports.isAbsolute = function(path){
-  if ('/' === path[0]) return true;
-  if (':' === path[1] && ('\\' === path[2] || '/' === path[2])) return true; // Windows device path
-  if ('\\\\' === path.substring(0, 2)) return true; // Microsoft Azure absolute path
-};
-
-/**
- * Flatten the given `arr`.
- *
- * @param {Array} arr
- * @return {Array}
- * @api private
- */
-
-exports.flatten = deprecate.function(flatten,
-  'utils.flatten: use array-flatten npm module instead');
-
-/**
- * Normalize the given `type`, for example "html" becomes "text/html".
- *
- * @param {String} type
- * @return {Object}
- * @api private
- */
-
-exports.normalizeType = function(type){
-  return ~type.indexOf('/')
-    ? acceptParams(type)
-    : { value: mime.lookup(type), params: {} };
-};
-
-/**
- * Normalize `types`, for example "html" becomes "text/html".
- *
- * @param {Array} types
- * @return {Array}
- * @api private
- */
-
-exports.normalizeTypes = function(types){
-  var ret = [];
-
-  for (var i = 0; i < types.length; ++i) {
-    ret.push(exports.normalizeType(types[i]));
-  }
-
-  return ret;
-};
-
-/**
- * Generate Content-Disposition header appropriate for the filename.
- * non-ascii filenames are urlencoded and a filename* parameter is added
- *
- * @param {String} filename
- * @return {String}
- * @api private
- */
-
-exports.contentDisposition = deprecate.function(contentDisposition,
-  'utils.contentDisposition: use content-disposition npm module instead');
-
-/**
- * Parse accept params `str` returning an
- * object with `.value`, `.quality` and `.params`.
- * also includes `.originalIndex` for stable sorting
- *
- * @param {String} str
- * @param {Number} index
- * @return {Object}
- * @api private
- */
-
-function acceptParams(str, index) {
-  var parts = str.split(/ *; */);
-  var ret = { value: parts[0], quality: 1, params: {}, originalIndex: index };
-
-  for (var i = 1; i < parts.length; ++i) {
-    var pms = parts[i].split(/ *= */);
-    if ('q' === pms[0]) {
-      ret.quality = parseFloat(pms[1]);
-    } else {
-      ret.params[pms[0]] = pms[1];
-    }
-  }
-
-  return ret;
-}
-
-/**
- * Compile "etag" value to function.
- *
- * @param  {Boolean|String|Function} val
- * @return {Function}
- * @api private
- */
-
-exports.compileETag = function(val) {
-  var fn;
-
-  if (typeof val === 'function') {
-    return val;
-  }
-
-  switch (val) {
-    case true:
-    case 'weak':
-      fn = exports.wetag;
-      break;
-    case false:
-      break;
-    case 'strong':
-      fn = exports.etag;
-      break;
-    default:
-      throw new TypeError('unknown value for etag function: ' + val);
-  }
-
-  return fn;
-}
-
-/**
- * Compile "query parser" value to function.
- *
- * @param  {String|Function} val
- * @return {Function}
- * @api private
- */
-
-exports.compileQueryParser = function compileQueryParser(val) {
-  var fn;
-
-  if (typeof val === 'function') {
-    return val;
-  }
-
-  switch (val) {
-    case true:
-    case 'simple':
-      fn = querystring.parse;
-      break;
-    case false:
-      fn = newObject;
-      break;
-    case 'extended':
-      fn = parseExtendedQueryString;
-      break;
-    default:
-      throw new TypeError('unknown value for query parser function: ' + val);
-  }
-
-  return fn;
-}
-
-/**
- * Compile "proxy trust" value to function.
- *
- * @param  {Boolean|String|Number|Array|Function} val
- * @return {Function}
- * @api private
- */
-
-exports.compileTrust = function(val) {
-  if (typeof val === 'function') return val;
-
-  if (val === true) {
-    // Support plain true/false
-    return function(){ return true };
-  }
-
-  if (typeof val === 'number') {
-    // Support trusting hop count
-    return function(a, i){ return i < val };
-  }
-
-  if (typeof val === 'string') {
-    // Support comma-separated values
-    val = val.split(',')
-      .map(function (v) { return v.trim() })
-  }
-
-  return proxyaddr.compile(val || []);
-}
-
-/**
- * Set the charset in a given Content-Type string.
- *
- * @param {String} type
- * @param {String} charset
- * @return {String}
- * @api private
- */
-
-exports.setCharset = function setCharset(type, charset) {
-  if (!type || !charset) {
-    return type;
-  }
-
-  // parse type
-  var parsed = contentType.parse(type);
-
-  // set charset
-  parsed.parameters.charset = charset;
-
-  // format type
-  return contentType.format(parsed);
-};
-
-/**
- * Create an ETag generator function, generating ETags with
- * the given options.
- *
- * @param {object} options
- * @return {function}
- * @private
- */
-
-function createETagGenerator (options) {
-  return function generateETag (body, encoding) {
-    var buf = !Buffer.isBuffer(body)
-      ? Buffer.from(body, encoding)
-      : body
-
-    return etag(buf, options)
-  }
-}
-
-/**
- * Parse an extended query string with qs.
- *
- * @return {Object}
- * @private
- */
-
-function parseExtendedQueryString(str) {
-  return qs.parse(str, {
-    allowPrototypes: true
+exports.removeBackslashes = str => {
+  return str.replace(REGEX_REMOVE_BACKSLASH, match => {
+    return match === '\\' ? '' : match;
   });
-}
+};
 
-/**
- * Return new empty object.
- *
- * @return {Object}
- * @api private
- */
+exports.supportsLookbehinds = () => {
+  const segs = process.version.slice(1).split('.').map(Number);
+  if (segs.length === 3 && segs[0] >= 9 || (segs[0] === 8 && segs[1] >= 10)) {
+    return true;
+  }
+  return false;
+};
 
-function newObject() {
-  return {};
-}
+exports.isWindows = options => {
+  if (options && typeof options.windows === 'boolean') {
+    return options.windows;
+  }
+  return win32 === true || path.sep === '\\';
+};
+
+exports.escapeLast = (input, char, lastIdx) => {
+  const idx = input.lastIndexOf(char, lastIdx);
+  if (idx === -1) return input;
+  if (input[idx - 1] === '\\') return exports.escapeLast(input, char, idx - 1);
+  return `${input.slice(0, idx)}\\${input.slice(idx)}`;
+};
+
+exports.removePrefix = (input, state = {}) => {
+  let output = input;
+  if (output.startsWith('./')) {
+    output = output.slice(2);
+    state.prefix = './';
+  }
+  return output;
+};
+
+exports.wrapOutput = (input, state = {}, options = {}) => {
+  const prepend = options.contains ? '' : '^';
+  const append = options.contains ? '' : '$';
+
+  let output = `${prepend}(?:${input})${append}`;
+  if (state.negated === true) {
+    output = `(?:^(?!${output}).*$)`;
+  }
+  return output;
+};
