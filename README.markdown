@@ -1,11 +1,3 @@
-concat-map
-==========
-
-Concatenative mapdashery.
-
-[![browser support](http://ci.testling.com/substack/node-concat-map.png)](http://ci.testling.com/substack/node-concat-map)
-
-[![build status](https://secure.travis-ci.org/substack/node-concat-map.png)](http://travis-ci.org/substack/node-concat-map)
 
 example
 =======
@@ -51,12 +43,3 @@ With [npm](http://npmjs.org) do:
 npm install concat-map
 ```
 
-license
-=======
-
-MIT
-
-notes
-=====
-
-This module was written while sitting high above the ground in a tree.
